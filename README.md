@@ -1,0 +1,1 @@
+Proxy I set up to deal with wss shenanigans when hosting locally and using browser-based apworlds. Just run it from your launcher (AP WebSocket Proxy), put in the info for your server, and connect your browser client to localhost:9999 and it'll do the rest. 
