@@ -55,7 +55,7 @@ def _append(window, message):
 async def proxy(local_ws, window, target):
     log(window, f"[Proxy] Client connected → {target}")
     try:
-        async with websockets.connect(target) as remote_ws:
+        async with websockets.connect(target, max_size=None) as remote_ws:
             async def forward(src, dst, label):
                 try:
                     async for msg in src:
@@ -71,16 +71,18 @@ async def proxy(local_ws, window, target):
                                     log(window, f"[Chat] {text}")
                                 else:
                                     log(window, f"[{label}] {cmd}")
-                        except (json.JSONDecodeError, Exception):
+                        except Exception:
                             pass
                         await dst.send(msg)
                 except websockets.exceptions.ConnectionClosed as e:
                     log(window, f"[{label}] closed: {e.code} {e.reason}")
 
-            await asyncio.gather(
-                forward(local_ws, remote_ws, "C→S"),
-                forward(remote_ws, local_ws, "S→C"),
-            )
+            c2s = asyncio.ensure_future(forward(local_ws, remote_ws, "C→S"))
+            s2c = asyncio.ensure_future(forward(remote_ws, local_ws, "S→C"))
+            _, pending = await asyncio.wait({c2s, s2c}, return_when=asyncio.FIRST_COMPLETED)
+            for task in pending:
+                task.cancel()
+            await asyncio.gather(*pending, return_exceptions=True)
     except Exception as e:
         log(window, f"[Proxy] Error: {e}")
     log(window, "[Proxy] Client disconnected.")
@@ -97,7 +99,7 @@ async def serve(window, target, local_port, open_url):
         log(window, f"[Proxy] Opening {open_url}")
         webbrowser.open(open_url)
 
-    async with websockets.serve(handler, "localhost", local_port):
+    async with websockets.serve(handler, "localhost", local_port, max_size=None):
         try:
             await asyncio.Future()
         except asyncio.CancelledError:
